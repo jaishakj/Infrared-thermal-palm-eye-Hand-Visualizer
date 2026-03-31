@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Infrared Palm Eye — Hand Visualiser</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+  <style>
+    /* ── Material 3 Dark tokens ─────────────────────────────────────────── */
+    :root {
+      --md-sys-color-background:        #0d0d0f;
+      --md-sys-color-surface:           #13131a;
+      --md-sys-color-surface-container: #1a1a24;
+      --md-sys-color-surface-variant:   #1f1f2e;
+      --md-sys-color-outline:           #2a2a3d;
+      --md-sys-color-outline-variant:   #1e1e2c;
+
+      --md-sys-color-primary:           #ff6b1a;
+      --md-sys-color-primary-dim:       #c44d00;
+      --md-sys-color-on-primary:        #1a0800;
+      --md-sys-color-secondary:         #ff9a4a;
+      --md-sys-color-tertiary:          #ff3d00;
+
+      --md-sys-color-on-surface:        #e8e0d8;
+      --md-sys-color-on-surface-var:    #9a8f83;
+
+      --md-sys-color-error:             #ff4444;
+      --md-sys-color-success:           #44ff88;
+      --md-sys-color-warn:              #ffcc00;
+
+      --md-elevation-1: 0 1px 3px rgba(0,0,0,.6), 0 1px 2px rgba(0,0,0,.4);
+      --md-elevation-2: 0 3px 6px rgba(0,0,0,.7), 0 2px 4px rgba(0,0,0,.5);
+      --md-elevation-3: 0 6px 16px rgba(0,0,0,.8), 0 3px 6px rgba(0,0,0,.6);
+
+      --font-display: 'Rajdhani', sans-serif;
+      --font-mono:    'Share Tech Mono', monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      background: var(--md-sys-color-background);
+      color: var(--md-sys-color-on-surface);
+      font-family: var(--font-display);
+      overflow: hidden;
+    }
+
+    /* ── Layout ──────────────────────────────────────────────────────────── */
+    .app-shell {
+      display: grid;
+      grid-template-rows: 56px 1fr 48px;
+      grid-template-columns: 1fr 300px;
+      grid-template-areas:
+        "topbar  topbar"
+        "feed    panel"
+        "footer  footer";
+      height: 100vh;
+      gap: 0;
+    }
+
+    /* ── Top App Bar ─────────────────────────────────────────────────────── */
+    .topbar {
+      grid-area: topbar;
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      background: var(--md-sys-color-surface);
+      border-bottom: 1px solid var(--md-sys-color-outline);
+      box-shadow: var(--md-elevation-1);
+      gap: 14px;
+      position: relative;
+      z-index: 10;
+    }
+
+    .topbar-icon {
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      background: var(--md-sys-color-primary);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+      box-shadow: 0 0 12px rgba(255,107,26,.5);
+      animation: iconPulse 3s ease-in-out infinite;
+    }
+
+    @keyframes iconPulse {
+      0%,100% { box-shadow: 0 0 12px rgba(255,107,26,.4); }
+      50%      { box-shadow: 0 0 24px rgba(255,107,26,.9); }
+    }
+
+    .topbar-title {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--md-sys-color-on-surface);
+    }
+    .topbar-title span { color: var(--md-sys-color-primary); }
+
+    .topbar-spacer { flex: 1; }
+
+    .status-chip {
+      display: flex; align-items: center; gap: 7px;
+      padding: 5px 14px;
+      border-radius: 100px;
+      background: var(--md-sys-color-surface-container);
+      border: 1px solid var(--md-sys-color-outline);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      transition: all .3s ease;
+    }
+    .status-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--md-sys-color-on-surface-var);
+      transition: background .3s, box-shadow .3s;
+    }
+    .status-chip.active .status-dot {
+      background: var(--md-sys-color-success);
+      box-shadow: 0 0 8px var(--md-sys-color-success);
+    }
+    .status-chip.active { border-color: rgba(68,255,136,.3); }
+
+    .fps-badge {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--md-sys-color-secondary);
+      letter-spacing: 1px;
+      padding: 4px 10px;
+      background: var(--md-sys-color-surface-container);
+      border: 1px solid var(--md-sys-color-outline);
+      border-radius: 6px;
+    }
+
+    /* ── Feed ────────────────────────────────────────────────────────────── */
+    .feed-area {
+      grid-area: feed;
+      position: relative;
+      background: #000;
+      overflow: hidden;
+    }
+
+    #videoFeed {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    /* No-signal overlay */
+    .no-signal {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 16px;
+      background: radial-gradient(ellipse at center, #0d0a08 0%, #000 100%);
+      transition: opacity .5s;
+      z-index: 5;
+    }
+    .no-signal.hidden { opacity: 0; pointer-events: none; }
+
+    .no-signal-icon {
+      font-size: 56px;
+      opacity: .3;
+      animation: nosigPulse 2s ease-in-out infinite;
+    }
+    @keyframes nosigPulse { 0%,100%{opacity:.2} 50%{opacity:.5} }
+
+    .no-signal p {
+      font-size: 13px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--md-sys-color-on-surface-var);
+      font-family: var(--font-mono);
+    }
+
+    /* Eye appear progress bar */
+    .eye-progress-wrap {
+      position: absolute;
+      bottom: 20px; left: 50%; transform: translateX(-50%);
+      width: 220px;
+      z-index: 6;
+      opacity: 0;
+      transition: opacity .3s;
+    }
+    .eye-progress-wrap.visible { opacity: 1; }
+    .eye-progress-label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--md-sys-color-primary);
+      text-align: center;
+      margin-bottom: 6px;
+    }
+    .eye-progress-track {
+      height: 3px;
+      background: var(--md-sys-color-outline);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .eye-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--md-sys-color-tertiary), var(--md-sys-color-primary), var(--md-sys-color-secondary));
+      border-radius: 2px;
+      width: 0%;
+      transition: width .1s linear;
+      box-shadow: 0 0 8px var(--md-sys-color-primary);
+    }
+
+    /* Corner decorations */
+    .corner {
+      position: absolute;
+      width: 24px; height: 24px;
+      z-index: 4;
+      pointer-events: none;
+    }
+    .corner::before, .corner::after {
+      content: '';
+      position: absolute;
+      background: var(--md-sys-color-primary);
+      opacity: .7;
+    }
+    .corner::before { width: 2px; height: 100%; }
+    .corner::after  { width: 100%; height: 2px; }
+    .corner.tl { top: 12px; left: 12px; }
+    .corner.tr { top: 12px; right: 12px; transform: scaleX(-1); }
+    .corner.bl { bottom: 12px; left: 12px; transform: scaleY(-1); }
+    .corner.br { bottom: 12px; right: 12px; transform: scale(-1); }
+
+    /* ── Side Panel ──────────────────────────────────────────────────────── */
+    .side-panel {
+      grid-area: panel;
+      background: var(--md-sys-color-surface);
+      border-left: 1px solid var(--md-sys-color-outline);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      overflow-x: hidden;
+      scrollbar-width: thin;
+      scrollbar-color: var(--md-sys-color-outline) transparent;
+    }
+
+    /* M3 Card */
+    .m3-card {
+      margin: 12px 12px 0;
+      background: var(--md-sys-color-surface-container);
+      border: 1px solid var(--md-sys-color-outline-variant);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: var(--md-elevation-1);
+    }
+    .m3-card:last-child { margin-bottom: 12px; }
+
+    .card-header {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 14px;
+    }
+    .card-icon {
+      font-size: 16px;
+      width: 32px; height: 32px;
+      border-radius: 10px;
+      background: var(--md-sys-color-surface-variant);
+      border: 1px solid var(--md-sys-color-outline);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .card-title {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: var(--md-sys-color-on-surface-var);
+    }
+
+    /* Palm area big number */
+    .metric-big {
+      text-align: center;
+      padding: 8px 0 4px;
+    }
+    .metric-big .value {
+      font-size: 48px;
+      font-weight: 700;
+      color: var(--md-sys-color-primary);
+      line-height: 1;
+      font-family: var(--font-mono);
+      text-shadow: 0 0 20px rgba(255,107,26,.4);
+      transition: all .2s;
+    }
+    .metric-big .unit {
+      font-size: 14px;
+      color: var(--md-sys-color-on-surface-var);
+      letter-spacing: 1px;
+      margin-top: 4px;
+    }
+
+    /* Joint angles */
+    .angle-row {
+      display: flex;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--md-sys-color-outline-variant);
+      gap: 10px;
+    }
+    .angle-row:last-child { border-bottom: none; }
+
+    .angle-name {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--md-sys-color-on-surface-var);
+      width: 52px;
+      flex-shrink: 0;
+    }
+
+    .angle-bar-track {
+      flex: 1;
+      height: 6px;
+      background: var(--md-sys-color-outline-variant);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .angle-bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width .15s ease, background .3s;
+    }
+
+    .angle-value {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      width: 40px;
+      text-align: right;
+      flex-shrink: 0;
+      transition: color .3s;
+    }
+
+    /* Eye status card */
+    .eye-status {
+      text-align: center;
+      padding: 6px 0;
+    }
+    .eye-glyph {
+      font-size: 40px;
+      display: block;
+      margin-bottom: 8px;
+      transition: all .4s;
+      filter: grayscale(1) opacity(.3);
+    }
+    .eye-glyph.active {
+      filter: grayscale(0) opacity(1);
+      text-shadow: 0 0 20px rgba(255,107,26,.8);
+      animation: eyeGlow 2s ease-in-out infinite;
+    }
+    @keyframes eyeGlow {
+      0%,100% { text-shadow: 0 0 12px rgba(255,107,26,.5); transform: scale(1); }
+      50%      { text-shadow: 0 0 30px rgba(255,107,26,1); transform: scale(1.08); }
+    }
+    .eye-label {
+      font-size: 10px;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: var(--md-sys-color-on-surface-var);
+      font-family: var(--font-mono);
+    }
+
+    /* Connection card */
+    .connect-btn {
+      width: 100%;
+      padding: 12px;
+      border-radius: 12px;
+      border: none;
+      background: var(--md-sys-color-primary);
+      color: var(--md-sys-color-on-primary);
+      font-family: var(--font-display);
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all .2s;
+      box-shadow: 0 0 16px rgba(255,107,26,.3);
+    }
+    .connect-btn:hover {
+      background: var(--md-sys-color-secondary);
+      box-shadow: 0 0 24px rgba(255,154,74,.5);
+      transform: translateY(-1px);
+    }
+    .connect-btn:active { transform: translateY(0); }
+    .connect-btn.connected {
+      background: var(--md-sys-color-surface-variant);
+      color: var(--md-sys-color-error);
+      box-shadow: none;
+    }
+
+    .ws-url-input {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--md-sys-color-outline);
+      background: var(--md-sys-color-surface-variant);
+      color: var(--md-sys-color-on-surface);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 1px;
+      margin-bottom: 10px;
+      outline: none;
+      transition: border-color .2s;
+    }
+    .ws-url-input:focus { border-color: var(--md-sys-color-primary); }
+
+    /* ── Footer ──────────────────────────────────────────────────────────── */
+    .footer {
+      grid-area: footer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      background: var(--md-sys-color-surface);
+      border-top: 1px solid var(--md-sys-color-outline);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 1.5px;
+      color: var(--md-sys-color-on-surface-var);
+    }
+    .footer a {
+      color: var(--md-sys-color-primary);
+      text-decoration: none;
+      transition: opacity .2s;
+    }
+    .footer a:hover { opacity: .7; }
+
+    /* Scrollbar */
+    .side-panel::-webkit-scrollbar { width: 4px; }
+    .side-panel::-webkit-scrollbar-track { background: transparent; }
+    .side-panel::-webkit-scrollbar-thumb { background: var(--md-sys-color-outline); border-radius: 2px; }
+
+    /* Skeleton placeholder when no data */
+    .placeholder-line {
+      height: 10px;
+      background: var(--md-sys-color-outline-variant);
+      border-radius: 5px;
+      margin: 6px 0;
+      animation: shimmer 1.5s ease-in-out infinite;
+    }
+    @keyframes shimmer {
+      0%,100% { opacity: .3 }
+      50%      { opacity: .7 }
+    }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+
+  <!-- ── Top Bar ──────────────────────────────────────────────────────────── -->
+  <header class="topbar">
+    <div class="topbar-icon">👁</div>
+    <div class="topbar-title">INFRARED <span>PALM EYE</span></div>
+    <div class="topbar-spacer"></div>
+    <div class="fps-badge" id="fpsBadge">-- FPS</div>
+    <div class="status-chip" id="statusChip">
+      <div class="status-dot"></div>
+      <span id="statusText">DISCONNECTED</span>
+    </div>
+  </header>
+
+  <!-- ── Camera Feed ───────────────────────────────────────────────────────── -->
+  <main class="feed-area">
+    <div class="corner tl"></div>
+    <div class="corner tr"></div>
+    <div class="corner bl"></div>
+    <div class="corner br"></div>
+
+    <div class="no-signal" id="noSignal">
+      <div class="no-signal-icon">📡</div>
+      <p>Connect to backend to start stream</p>
+    </div>
+
+    <img id="videoFeed" alt="Live hand visualiser feed" />
+
+    <div class="eye-progress-wrap" id="eyeProgressWrap">
+      <div class="eye-progress-label" id="eyeProgressLabel">EYE AWAKENING</div>
+      <div class="eye-progress-track">
+        <div class="eye-progress-fill" id="eyeProgressFill"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ── Side Panel ───────────────────────────────────────────────────────── -->
+  <aside class="side-panel">
+
+    <!-- Connect card -->
+    <div class="m3-card">
+      <div class="card-header">
+        <div class="card-icon">🔌</div>
+        <div class="card-title">Backend Connection</div>
+      </div>
+      <input class="ws-url-input" id="wsUrl" value="ws://localhost:8000/ws" spellcheck="false" />
+      <button class="connect-btn" id="connectBtn" onclick="toggleConnect()">CONNECT</button>
+    </div>
+
+    <!-- Eye status -->
+    <div class="m3-card">
+      <div class="card-header">
+        <div class="card-icon">👁</div>
+        <div class="card-title">Eye Status</div>
+      </div>
+      <div class="eye-status">
+        <span class="eye-glyph" id="eyeGlyph">👁</span>
+        <div class="eye-label" id="eyeLabel">DORMANT</div>
+      </div>
+    </div>
+
+    <!-- Palm area -->
+    <div class="m3-card">
+      <div class="card-header">
+        <div class="card-icon">🖐</div>
+        <div class="card-title">Palm Area</div>
+      </div>
+      <div class="metric-big" id="palmAreaCard">
+        <div class="value" id="palmAreaVal">--</div>
+        <div class="unit">cm²  ·  estimated surface</div>
+      </div>
+    </div>
+
+    <!-- Joint angles -->
+    <div class="m3-card">
+      <div class="card-header">
+        <div class="card-icon">📐</div>
+        <div class="card-title">Joint Angles (PIP)</div>
+      </div>
+      <div id="jointAnglesPanel">
+        <div class="placeholder-line" style="width:80%"></div>
+        <div class="placeholder-line" style="width:65%"></div>
+        <div class="placeholder-line" style="width:70%"></div>
+        <div class="placeholder-line" style="width:55%"></div>
+        <div class="placeholder-line" style="width:75%"></div>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- ── Footer ───────────────────────────────────────────────────────────── -->
+  <footer class="footer">
+    <span>INFRARED PALM EYE VISUALISER · MEDIAPIPE + FASTAPI</span>
+    <a href="https://github.com/jaishakj/Infrared-thermal-palm-eye-Hand-Visualizer" target="_blank">
+      ⬡ github/jaishakj
+    </a>
+    <span id="footerTime">--:--:--</span>
+  </footer>
+
+</div>
+
+<script>
+  // ── State ────────────────────────────────────────────────────────────────
+  let ws = null;
+  let connected = false;
+  const EYE_DELAY = 2.5;
+
+  // ── DOM refs ─────────────────────────────────────────────────────────────
+  const videoFeed       = document.getElementById('videoFeed');
+  const noSignal        = document.getElementById('noSignal');
+  const connectBtn      = document.getElementById('connectBtn');
+  const wsUrlInput      = document.getElementById('wsUrl');
+  const statusChip      = document.getElementById('statusChip');
+  const statusText      = document.getElementById('statusText');
+  const fpsBadge        = document.getElementById('fpsBadge');
+  const eyeGlyph        = document.getElementById('eyeGlyph');
+  const eyeLabel        = document.getElementById('eyeLabel');
+  const palmAreaVal     = document.getElementById('palmAreaVal');
+  const jointAnglesPanel= document.getElementById('jointAnglesPanel');
+  const eyeProgressWrap = document.getElementById('eyeProgressWrap');
+  const eyeProgressFill = document.getElementById('eyeProgressFill');
+  const eyeProgressLabel= document.getElementById('eyeProgressLabel');
+  const footerTime      = document.getElementById('footerTime');
+
+  // ── Clock ─────────────────────────────────────────────────────────────────
+  setInterval(() => {
+    footerTime.textContent = new Date().toLocaleTimeString('en-IN', { hour12: false });
+  }, 1000);
+
+  // ── WebSocket ─────────────────────────────────────────────────────────────
+  function toggleConnect() {
+    connected ? disconnect() : connect();
+  }
+
+  function connect() {
+    const url = wsUrlInput.value.trim();
+    if (!url) return;
+
+    ws = new WebSocket(url);
+
+    ws.onopen = () => {
+      connected = true;
+      connectBtn.textContent = 'DISCONNECT';
+      connectBtn.classList.add('connected');
+      statusChip.classList.add('active');
+      statusText.textContent = 'CONNECTED';
+      noSignal.classList.add('hidden');
+    };
+
+    ws.onmessage = (evt) => {
+      const data = JSON.parse(evt.data);
+      renderFrame(data);
+    };
+
+    ws.onerror = () => {
+      statusText.textContent = 'ERROR';
+    };
+
+    ws.onclose = () => {
+      connected = false;
+      connectBtn.textContent = 'CONNECT';
+      connectBtn.classList.remove('connected');
+      statusChip.classList.remove('active');
+      statusText.textContent = 'DISCONNECTED';
+      noSignal.classList.remove('hidden');
+      resetUI();
+    };
+  }
+
+  function disconnect() {
+    ws && ws.close();
+  }
+
+  // ── Render frame payload ──────────────────────────────────────────────────
+  function renderFrame(data) {
+    // Video frame
+    videoFeed.src = 'data:image/jpeg;base64,' + data.frame;
+
+    // FPS
+    fpsBadge.textContent = data.fps + ' FPS';
+
+    // Eye progress bar (shows while hand is present but eye not visible)
+    if (data.hand_present && !data.eye_visible) {
+      const pct = Math.min(100, (data.hand_timer / EYE_DELAY) * 100);
+      eyeProgressWrap.classList.add('visible');
+      eyeProgressFill.style.width = pct + '%';
+      const rem = Math.max(0, EYE_DELAY - data.hand_timer).toFixed(1);
+      eyeProgressLabel.textContent = `EYE AWAKENING IN ${rem}s`;
+    } else {
+      eyeProgressWrap.classList.remove('visible');
+    }
+
+    // Eye glyph
+    if (data.eye_visible) {
+      eyeGlyph.classList.add('active');
+      eyeLabel.textContent = 'AWAKENED';
+      eyeLabel.style.color = 'var(--md-sys-color-primary)';
+    } else {
+      eyeGlyph.classList.remove('active');
+      eyeLabel.textContent = data.hand_present ? 'AWAKENING...' : 'DORMANT';
+      eyeLabel.style.color = '';
+    }
+
+    // Measurements
+    if (data.measurements) {
+      const m = data.measurements;
+      palmAreaVal.textContent = m.palm_area ?? '--';
+      renderJointAngles(m.joint_angles);
+    } else {
+      palmAreaVal.textContent = '--';
+      resetAngles();
+    }
+  }
+
+  // ── Joint angle rows ──────────────────────────────────────────────────────
+  const ANGLE_COLORS = (deg) => {
+    if (deg >= 150) return { bar: 'var(--md-sys-color-success)',  text: 'var(--md-sys-color-success)'  };
+    if (deg >= 90)  return { bar: 'var(--md-sys-color-warn)',     text: 'var(--md-sys-color-warn)'     };
+    return            { bar: 'var(--md-sys-color-error)',   text: 'var(--md-sys-color-error)'   };
+  };
+
+  function renderJointAngles(angles) {
+    if (!angles) { resetAngles(); return; }
+    jointAnglesPanel.innerHTML = '';
+    for (const [name, deg] of Object.entries(angles)) {
+      const c   = ANGLE_COLORS(deg);
+      const pct = Math.min(100, (deg / 180) * 100).toFixed(1);
+      const row = document.createElement('div');
+      row.className = 'angle-row';
+      row.innerHTML = `
+        <div class="angle-name">${name}</div>
+        <div class="angle-bar-track">
+          <div class="angle-bar-fill" style="width:${pct}%;background:${c.bar}"></div>
+        </div>
+        <div class="angle-value" style="color:${c.text}">${deg}°</div>
+      `;
+      jointAnglesPanel.appendChild(row);
+    }
+  }
+
+  function resetUI() {
+    palmAreaVal.textContent = '--';
+    resetAngles();
+    eyeGlyph.classList.remove('active');
+    eyeLabel.textContent = 'DORMANT';
+    eyeLabel.style.color = '';
+    eyeProgressWrap.classList.remove('visible');
+    fpsBadge.textContent = '-- FPS';
+  }
+
+  function resetAngles() {
+    jointAnglesPanel.innerHTML = `
+      <div class="placeholder-line" style="width:80%"></div>
+      <div class="placeholder-line" style="width:65%"></div>
+      <div class="placeholder-line" style="width:70%"></div>
+      <div class="placeholder-line" style="width:55%"></div>
+      <div class="placeholder-line" style="width:75%"></div>
+    `;
+  }
+</script>
+</body>
+</html>
